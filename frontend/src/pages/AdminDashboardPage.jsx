@@ -2,8 +2,42 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api, { setAdminToken } from "../lib/api";
 
-const emptyQuestion = { type: "single", question: "", codeSnippet: "", options: ["", "", "", ""], correctIndexes: [], points: 1 };
+const emptyQuestion = {
+  type: "single",
+  question: "",
+  codeSnippet: "",
+  starterCode: "",
+  language: "javascript",
+  supportedLanguages: ["javascript"],
+  starterCodeByLanguage: {
+    javascript: "",
+    python: "",
+    c: "",
+    cpp: "",
+  },
+  testCases: [{ input: "", expectedOutput: "", isHidden: false }],
+  options: ["", "", "", ""],
+  correctIndexes: [],
+  points: 1
+};
 const emptySection = { name: "", questions: [emptyQuestion] };
+const CODING_LANG_OPTIONS = [
+  { value: "javascript", label: "JavaScript" },
+  { value: "python", label: "Python" },
+  { value: "c", label: "C" },
+  { value: "cpp", label: "C++" },
+];
+
+function makeEmptyQuestion() {
+  return {
+    ...emptyQuestion,
+    supportedLanguages: [...emptyQuestion.supportedLanguages],
+    starterCodeByLanguage: { ...emptyQuestion.starterCodeByLanguage },
+    testCases: emptyQuestion.testCases.map((testCase) => ({ ...testCase })),
+    options: [...emptyQuestion.options],
+    correctIndexes: [...emptyQuestion.correctIndexes],
+  };
+}
 
 /* ── Icons ─────────────────────────────────────────────────── */
 const Icon = ({ d, className = "h-5 w-5" }) => (
@@ -210,7 +244,7 @@ export default function AdminDashboardPage() {
   };
 
   /* ── Exam builder ── */
-  const addSection  = () => setExamForm((s) => ({ ...s, sections: [...s.sections, { ...emptySection, questions: [{ ...emptyQuestion }] }] }));
+  const addSection  = () => setExamForm((s) => ({ ...s, sections: [...s.sections, { ...emptySection, questions: [makeEmptyQuestion()] }] }));
   const removeSection = (si) =>
     setExamForm((s) => {
       if (!Array.isArray(s.sections) || s.sections.length <= 1) return s;
@@ -218,7 +252,7 @@ export default function AdminDashboardPage() {
       sections.splice(si, 1);
       return { ...s, sections };
     });
-  const addQuestion = (si) => setExamForm((s) => { const sec = [...s.sections]; sec[si] = { ...sec[si], questions: [...sec[si].questions, { ...emptyQuestion }] }; return { ...s, sections: sec }; });
+  const addQuestion = (si) => setExamForm((s) => { const sec = [...s.sections]; sec[si] = { ...sec[si], questions: [...sec[si].questions, makeEmptyQuestion()] }; return { ...s, sections: sec }; });
   const removeQuestion = (si, qi) =>
     setExamForm((s) => {
       const sec = [...s.sections];
@@ -236,10 +270,28 @@ export default function AdminDashboardPage() {
       const sec = [...s.sections];
       const qs = [...sec[si].questions];
       const q = qs[qi];
-      const newCorrect = newType === "single" && q.correctIndexes.length > 1
-        ? [q.correctIndexes[0]]
-        : q.correctIndexes;
-      qs[qi] = { ...q, type: newType, correctIndexes: newCorrect };
+      const newCorrect = newType === "coding"
+        ? []
+        : newType === "single" && q.correctIndexes.length > 1
+          ? [q.correctIndexes[0]]
+          : q.correctIndexes;
+      qs[qi] = {
+        ...q,
+        type: newType,
+        correctIndexes: newCorrect,
+        supportedLanguages: Array.isArray(q.supportedLanguages) && q.supportedLanguages.length
+          ? q.supportedLanguages
+          : ["javascript"],
+        starterCodeByLanguage: {
+          javascript: q?.starterCodeByLanguage?.javascript || "",
+          python: q?.starterCodeByLanguage?.python || "",
+          c: q?.starterCodeByLanguage?.c || "",
+          cpp: q?.starterCodeByLanguage?.cpp || "",
+        },
+        testCases: Array.isArray(q.testCases) && q.testCases.length
+          ? q.testCases
+          : [{ input: "", expectedOutput: "", isHidden: false }],
+      };
       sec[si] = { ...sec[si], questions: qs };
       return { ...s, sections: sec };
     });
@@ -300,6 +352,78 @@ export default function AdminDashboardPage() {
       return { ...s, sections: sec };
     });
 
+  const toggleCodingLanguage = (si, qi, language) =>
+    setExamForm((s) => {
+      const sec = [...s.sections];
+      const qs = [...sec[si].questions];
+      const q = qs[qi];
+      const set = new Set(q.supportedLanguages || []);
+      if (set.has(language)) {
+        if (set.size <= 1) return s;
+        set.delete(language);
+      } else {
+        set.add(language);
+      }
+      qs[qi] = { ...q, supportedLanguages: Array.from(set) };
+      sec[si] = { ...sec[si], questions: qs };
+      return { ...s, sections: sec };
+    });
+
+  const updateStarterCodeByLanguage = (si, qi, language, value) =>
+    setExamForm((s) => {
+      const sec = [...s.sections];
+      const qs = [...sec[si].questions];
+      const q = qs[qi];
+      qs[qi] = {
+        ...q,
+        starterCodeByLanguage: {
+          ...(q.starterCodeByLanguage || {}),
+          [language]: value,
+        },
+      };
+      sec[si] = { ...sec[si], questions: qs };
+      return { ...s, sections: sec };
+    });
+
+  const updateCodingTestCase = (si, qi, tcIdx, key, value) =>
+    setExamForm((s) => {
+      const sec = [...s.sections];
+      const qs = [...sec[si].questions];
+      const q = qs[qi];
+      const testCases = Array.isArray(q.testCases) ? [...q.testCases] : [];
+      if (!testCases[tcIdx]) return s;
+      testCases[tcIdx] = { ...testCases[tcIdx], [key]: value };
+      qs[qi] = { ...q, testCases };
+      sec[si] = { ...sec[si], questions: qs };
+      return { ...s, sections: sec };
+    });
+
+  const addCodingTestCase = (si, qi) =>
+    setExamForm((s) => {
+      const sec = [...s.sections];
+      const qs = [...sec[si].questions];
+      const q = qs[qi];
+      qs[qi] = {
+        ...q,
+        testCases: [...(q.testCases || []), { input: "", expectedOutput: "", isHidden: true }],
+      };
+      sec[si] = { ...sec[si], questions: qs };
+      return { ...s, sections: sec };
+    });
+
+  const removeCodingTestCase = (si, qi, tcIdx) =>
+    setExamForm((s) => {
+      const sec = [...s.sections];
+      const qs = [...sec[si].questions];
+      const q = qs[qi];
+      const testCases = Array.isArray(q.testCases) ? [...q.testCases] : [];
+      if (testCases.length <= 1) return s;
+      testCases.splice(tcIdx, 1);
+      qs[qi] = { ...q, testCases };
+      sec[si] = { ...sec[si], questions: qs };
+      return { ...s, sections: sec };
+    });
+
   const buildExamPayload = () => {
     const title = String(examForm.title || "").trim();
     const durationMinutes = Number(examForm.durationMinutes);
@@ -333,6 +457,50 @@ export default function AdminDashboardPage() {
         const question = String(q?.question || "").trim();
         if (!question) throw new Error(`Section ${sIdx + 1}, Q${qIdx + 1}: question text is required.`);
 
+        const points = Number(q?.points);
+        if (!Number.isInteger(points) || points < 1) {
+          throw new Error(`Section ${sIdx + 1}, Q${qIdx + 1}: points must be at least 1.`);
+        }
+
+        if (q?.type === "coding") {
+          const supportedLanguages = (Array.isArray(q?.supportedLanguages) ? q.supportedLanguages : [])
+            .filter((lang) => CODING_LANG_OPTIONS.some((opt) => opt.value === lang));
+          if (supportedLanguages.length === 0) {
+            throw new Error(`Section ${sIdx + 1}, Q${qIdx + 1}: select at least one programming language.`);
+          }
+
+          const starterCodeByLanguage = {};
+          supportedLanguages.forEach((lang) => {
+            starterCodeByLanguage[lang] = String(q?.starterCodeByLanguage?.[lang] || "");
+          });
+
+          const testCases = (Array.isArray(q?.testCases) ? q.testCases : [])
+            .map((tc) => ({
+              input: String(tc?.input || ""),
+              expectedOutput: String(tc?.expectedOutput || "").trim(),
+              isHidden: Boolean(tc?.isHidden),
+            }))
+            .filter((tc) => tc.expectedOutput.length > 0);
+
+          if (testCases.length === 0) {
+            throw new Error(`Section ${sIdx + 1}, Q${qIdx + 1}: add at least one test case with expected output.`);
+          }
+
+          return {
+            type: "coding",
+            question,
+            codeSnippet: String(q?.codeSnippet || ""),
+            starterCode: String(q?.starterCode || ""),
+            language: supportedLanguages[0],
+            supportedLanguages,
+            starterCodeByLanguage,
+            testCases,
+            options: [],
+            correctOptionIndexes: [],
+            points,
+          };
+        }
+
         const rawOptions = (q?.options || []).map((t) => ({ text: String(t || "").trim() }));
         const nonEmptyOptions = rawOptions
           .map((o, origIdx) => ({ ...o, origIdx }))
@@ -353,15 +521,15 @@ export default function AdminDashboardPage() {
           throw new Error(`Section ${sIdx + 1}, Q${qIdx + 1}: select at least one correct answer.`);
         }
 
-        const points = Number(q?.points);
-        if (!Number.isInteger(points) || points < 1) {
-          throw new Error(`Section ${sIdx + 1}, Q${qIdx + 1}: points must be at least 1.`);
-        }
-
         return {
           type: q?.type === "multiple" ? "multiple" : "single",
           question,
           codeSnippet: String(q?.codeSnippet || ""),
+          starterCode: "",
+          language: "javascript",
+          supportedLanguages: ["javascript"],
+          starterCodeByLanguage: {},
+          testCases: [],
           options,
           correctOptionIndexes,
           points,
@@ -389,7 +557,7 @@ export default function AdminDashboardPage() {
   const resetExamBuilder = () => {
     setExamForm({
       ...defaultExamForm,
-      sections: [{ ...emptySection, questions: [{ ...emptyQuestion }] }],
+      sections: [{ ...emptySection, questions: [makeEmptyQuestion()] }],
     });
     setExamStep(1);
     setEditingExamId(null);
@@ -403,16 +571,34 @@ export default function AdminDashboardPage() {
           name: String(section?.name || ""),
           questions: Array.isArray(section?.questions) && section.questions.length > 0
             ? section.questions.map((q) => ({
-                type: q?.type === "multiple" ? "multiple" : "single",
+                type: q?.type === "coding" ? "coding" : q?.type === "multiple" ? "multiple" : "single",
                 question: String(q?.question || ""),
                 codeSnippet: String(q?.codeSnippet || ""),
+                starterCode: String(q?.starterCode || ""),
+                language: q?.language === "javascript" ? "javascript" : "javascript",
+                supportedLanguages: Array.isArray(q?.supportedLanguages) && q.supportedLanguages.length
+                  ? q.supportedLanguages
+                  : [q?.language || "javascript"],
+                starterCodeByLanguage: {
+                  javascript: String(q?.starterCodeByLanguage?.javascript || ""),
+                  python: String(q?.starterCodeByLanguage?.python || ""),
+                  c: String(q?.starterCodeByLanguage?.c || ""),
+                  cpp: String(q?.starterCodeByLanguage?.cpp || ""),
+                },
+                testCases: Array.isArray(q?.testCases) && q.testCases.length
+                  ? q.testCases.map((tc) => ({
+                      input: String(tc?.input || ""),
+                      expectedOutput: String(tc?.expectedOutput || ""),
+                      isHidden: Boolean(tc?.isHidden),
+                    }))
+                  : [{ input: "", expectedOutput: "", isHidden: false }],
                 options: Array.isArray(q?.options) ? q.options.map((opt) => opt?.text || "") : ["", "", "", ""],
                 correctIndexes: Array.isArray(q?.correctOptionIndexes) ? [...q.correctOptionIndexes] : [],
                 points: q?.points ?? 1,
               }))
-            : [{ ...emptyQuestion }],
+            : [makeEmptyQuestion()],
         }))
-      : [{ ...emptySection, questions: [{ ...emptyQuestion }] }];
+      : [{ ...emptySection, questions: [makeEmptyQuestion()] }];
 
     setExamForm({
       title: String(exam.title || ""),
@@ -917,6 +1103,7 @@ export default function AdminDashboardPage() {
                                 {[
                                   { value: "single",   label: "Single" },
                                   { value: "multiple", label: "Multiple" },
+                                  { value: "coding",   label: "Coding" },
                                 ].map((opt) => (
                                   <button
                                     key={opt.value}
@@ -981,7 +1168,107 @@ export default function AdminDashboardPage() {
                               />
                             </div>
 
+                            {q.type === "coding" && (
+                              <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                <div className="space-y-2">
+                                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                                    Supported Languages
+                                  </label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {CODING_LANG_OPTIONS.map((lang) => {
+                                      const selected = (q.supportedLanguages || []).includes(lang.value);
+                                      return (
+                                        <button
+                                          key={lang.value}
+                                          type="button"
+                                          onClick={() => toggleCodingLanguage(sIdx, qIdx, lang.value)}
+                                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                            selected
+                                              ? "border-brand-500 bg-brand-500 text-white"
+                                              : "border-slate-300 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-600"
+                                          }`}
+                                        >
+                                          {lang.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                                    Starter Code By Language
+                                  </label>
+                                  {(q.supportedLanguages || []).map((lang) => (
+                                    <div key={lang} className="space-y-1.5">
+                                      <p className="text-[11px] font-semibold text-slate-600">
+                                        {CODING_LANG_OPTIONS.find((o) => o.value === lang)?.label || lang}
+                                      </p>
+                                      <textarea
+                                        className={`${inputCls} min-h-24 resize-y font-mono text-xs`}
+                                        placeholder={`Starter code for ${lang}`}
+                                        value={q?.starterCodeByLanguage?.[lang] || ""}
+                                        onChange={(e) => updateStarterCodeByLanguage(sIdx, qIdx, lang, e.target.value)}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                                      Test Cases
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() => addCodingTestCase(sIdx, qIdx)}
+                                      className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+                                    >
+                                      + Add Test Case
+                                    </button>
+                                  </div>
+                                  <div className="space-y-2">
+                                    {(q.testCases || []).map((testCase, tcIdx) => (
+                                      <div key={tcIdx} className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <p className="text-xs font-semibold text-slate-600">Case {tcIdx + 1}</p>
+                                          <button
+                                            type="button"
+                                            onClick={() => removeCodingTestCase(sIdx, qIdx, tcIdx)}
+                                            className="text-xs font-semibold text-rose-600 hover:text-rose-700"
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                        <textarea
+                                          className={`${inputCls} min-h-16 resize-y font-mono text-xs`}
+                                          placeholder="Input (stdin)"
+                                          value={testCase.input || ""}
+                                          onChange={(e) => updateCodingTestCase(sIdx, qIdx, tcIdx, "input", e.target.value)}
+                                        />
+                                        <textarea
+                                          className={`${inputCls} min-h-16 resize-y font-mono text-xs`}
+                                          placeholder="Expected output"
+                                          value={testCase.expectedOutput || ""}
+                                          onChange={(e) => updateCodingTestCase(sIdx, qIdx, tcIdx, "expectedOutput", e.target.value)}
+                                        />
+                                        <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                                          <input
+                                            type="checkbox"
+                                            checked={Boolean(testCase.isHidden)}
+                                            onChange={(e) => updateCodingTestCase(sIdx, qIdx, tcIdx, "isHidden", e.target.checked)}
+                                          />
+                                          Hidden test case
+                                        </label>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Answer options */}
+                            {q.type !== "coding" && (
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between">
                                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -1082,6 +1369,7 @@ export default function AdminDashboardPage() {
                                 </p>
                               )}
                             </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1409,10 +1697,17 @@ export default function AdminDashboardPage() {
 
                   <div className="space-y-2 max-h-80 overflow-y-auto rounded-xl border border-slate-100 p-1">
                     {selectedSubmission.answers.map((ans, idx) => (
-                      <div key={idx} className={`rounded-xl px-4 py-3 text-sm ${ans.isCorrect ? "bg-emerald-50 text-emerald-900" : "bg-rose-50 text-rose-900"}`}>
+                      <div key={idx} className={`rounded-xl px-4 py-3 text-sm ${
+                        ans.questionType === "coding"
+                          ? "bg-slate-50 text-slate-900"
+                          : ans.isCorrect
+                            ? "bg-emerald-50 text-emerald-900"
+                            : "bg-rose-50 text-rose-900"
+                      }`}>
                         {(() => {
                           const section = selectedSubmission.exam?.sections?.[ans.sectionIndex];
                           const question = section?.questions?.[ans.questionIndex];
+                          const isCoding = (ans.questionType || question?.type) === "coding";
                           const selectedIndexes = Array.isArray(ans.selectedOptionIndexes) ? ans.selectedOptionIndexes : [];
                           const selectedTexts = selectedIndexes.map((optIdx) => question?.options?.[optIdx]?.text || `Option ${optIdx}`);
                           const correctIndexes = Array.isArray(question?.correctOptionIndexes) ? question.correctOptionIndexes : [];
@@ -1421,22 +1716,47 @@ export default function AdminDashboardPage() {
                           return (
                             <>
                               <div className="flex items-start gap-3">
-                        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${ans.isCorrect ? "bg-emerald-500" : "bg-rose-500"}`}>
-                          {ans.isCorrect ? "✓" : "✗"}
+                        <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${
+                          ans.questionType === "coding"
+                            ? "bg-slate-500"
+                            : ans.isCorrect
+                              ? "bg-emerald-500"
+                              : "bg-rose-500"
+                        }`}>
+                          {ans.questionType === "coding" ? ">" : ans.isCorrect ? "✓" : "✗"}
                         </span>
                                 <div className="min-w-0 space-y-1">
                                   <p className="font-semibold">
                                     {section?.name || `Section ${ans.sectionIndex + 1}`} · Q{ans.questionIndex + 1}
                                   </p>
                                   <p className="text-slate-800">{question?.question || "Question text unavailable"}</p>
-                                  <p>
-                                    <span className="font-semibold">Selected Answer:</span>{" "}
-                                    {selectedTexts.length ? selectedTexts.join(" | ") : "Not answered"}
-                                  </p>
-                                  <p>
-                                    <span className="font-semibold">Correct Answer:</span>{" "}
-                                    {correctTexts.length ? correctTexts.join(" | ") : "Not available"}
-                                  </p>
+                                  {isCoding ? (
+                                    <>
+                                      <p>
+                                        <span className="font-semibold">Language:</span>{" "}
+                                        {ans.selectedLanguage || "javascript"}
+                                      </p>
+                                      <p>
+                                        <span className="font-semibold">Test Cases:</span>{" "}
+                                        {Number(ans.testCasesPassed || 0)} / {Number(ans.testCasesTotal || 0)} passed
+                                      </p>
+                                      <p>
+                                        <span className="font-semibold">Submitted Code:</span>{" "}
+                                        {ans.submittedCode ? "Provided" : "Not answered"}
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p>
+                                        <span className="font-semibold">Selected Answer:</span>{" "}
+                                        {selectedTexts.length ? selectedTexts.join(" | ") : "Not answered"}
+                                      </p>
+                                      <p>
+                                        <span className="font-semibold">Correct Answer:</span>{" "}
+                                        {correctTexts.length ? correctTexts.join(" | ") : "Not available"}
+                                      </p>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </>

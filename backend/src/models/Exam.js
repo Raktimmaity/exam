@@ -7,15 +7,71 @@ const optionSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const testCaseSchema = new mongoose.Schema(
+  {
+    input: { type: String, default: "" },
+    expectedOutput: { type: String, required: true, trim: true },
+    isHidden: { type: Boolean, default: true }
+  },
+  { _id: false }
+);
+
 const questionSchema = new mongoose.Schema(
   {
-    type: { type: String, enum: ["single", "multiple"], default: "single" },
+    type: { type: String, enum: ["single", "multiple", "coding"], default: "single" },
     question: { type: String, required: true, trim: true },
     codeSnippet: { type: String, trim: true, default: "" },
-    options: { type: [optionSchema], validate: [(v) => v.length >= 2, "At least 2 options required"] },
+    starterCode: { type: String, trim: true, default: "" }, // backwards compatibility
+    language: { type: String, enum: ["javascript", "python", "c", "cpp"], default: "javascript" }, // backwards compatibility
+    supportedLanguages: {
+      type: [String],
+      enum: ["javascript", "python", "c", "cpp"],
+      default: ["javascript"],
+      validate: {
+        validator(value) {
+          if (this.type !== "coding") return true;
+          return Array.isArray(value) && value.length >= 1;
+        },
+        message: "At least one language is required for coding questions"
+      }
+    },
+    starterCodeByLanguage: {
+      type: Map,
+      of: String,
+      default: {}
+    },
+    testCases: {
+      type: [testCaseSchema],
+      default: [],
+      validate: {
+        validator(value) {
+          if (this.type !== "coding") return true;
+          return Array.isArray(value) && value.length >= 1;
+        },
+        message: "At least one test case is required for coding questions"
+      }
+    },
+    options: {
+      type: [optionSchema],
+      default: [],
+      validate: {
+        validator(value) {
+          if (this.type === "coding") return true;
+          return Array.isArray(value) && value.length >= 2;
+        },
+        message: "At least 2 options required"
+      }
+    },
     correctOptionIndexes: {
       type: [Number],
-      validate: [(v) => v.length >= 1, "At least 1 correct option required"]
+      default: [],
+      validate: {
+        validator(value) {
+          if (this.type === "coding") return true;
+          return Array.isArray(value) && value.length >= 1;
+        },
+        message: "At least 1 correct option required"
+      }
     },
     points: { type: Number, default: 1, min: 1 }
   },

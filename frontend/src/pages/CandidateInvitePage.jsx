@@ -123,6 +123,12 @@ function ExamView({
   countdown,
   answers,
   setAnswers,
+  codingAnswers,
+  setCodingAnswers,
+  onRunCode,
+  runCodeState,
+  runInputs,
+  setRunInputs,
   onSubmit,
   submitting,
   error,
@@ -146,6 +152,14 @@ function ExamView({
   const currentQuestion = currentSection?.questions[activeQuestionIdx];
   const currentKey      = `${activeSectionIdx}-${activeQuestionIdx}`;
   const currentSelected = answers[currentKey] || [];
+  const defaultLanguage = currentQuestion?.supportedLanguages?.[0] || currentQuestion?.language || "javascript";
+  const currentCodingState = codingAnswers[currentKey] || {
+    language: defaultLanguage,
+    code: currentQuestion?.starterCodeByLanguage?.[defaultLanguage] || currentQuestion?.starterCode || "",
+  };
+  const currentCode = currentCodingState.code || "";
+  const currentLanguage = currentCodingState.language || defaultLanguage;
+  const currentRunInput = runInputs[currentKey] || "";
 
   const globalQuestionNumber = useMemo(() => {
     let n = 0;
@@ -159,8 +173,11 @@ function ExamView({
   const answeredCount = useMemo(() =>
     sections.reduce((acc, _s, sIdx) =>
       acc + sections[sIdx].questions.filter((_, qIdx) =>
-        (answers[`${sIdx}-${qIdx}`] || []).length > 0).length, 0),
-    [answers, sections]);
+        sections[sIdx].questions[qIdx]?.type === "coding"
+          ? Boolean((codingAnswers[`${sIdx}-${qIdx}`]?.code || "").trim())
+          : (answers[`${sIdx}-${qIdx}`] || []).length > 0
+      ).length, 0),
+    [answers, codingAnswers, sections]);
 
   const goTo = (sIdx, qIdx) => {
     setActiveSectionIdx(sIdx);
@@ -181,7 +198,19 @@ function ExamView({
     }
   };
 
-  const clearResponse = () => setAnswers((s) => ({ ...s, [currentKey]: [] }));
+  const clearResponse = () => {
+    if (currentQuestion?.type === "coding") {
+      setCodingAnswers((s) => ({
+        ...s,
+        [currentKey]: {
+          language: currentLanguage,
+          code: "",
+        }
+      }));
+      return;
+    }
+    setAnswers((s) => ({ ...s, [currentKey]: [] }));
+  };
 
   const toggleMark = () => {
     setMarked((m) => {
@@ -267,8 +296,10 @@ function ExamView({
         {sections.length > 0 && (
           <div className="flex gap-0 border-t border-white/10 overflow-x-auto">
             {sections.map((sec, sIdx) => {
-              const secAnswered = sec.questions.filter(
-                (_, qIdx) => (answers[`${sIdx}-${qIdx}`] || []).length > 0
+              const secAnswered = sec.questions.filter((q, qIdx) =>
+                q?.type === "coding"
+                  ? Boolean((codingAnswers[`${sIdx}-${qIdx}`]?.code || "").trim())
+                  : (answers[`${sIdx}-${qIdx}`] || []).length > 0
               ).length;
               return (
                 <button
@@ -315,8 +346,12 @@ function ExamView({
               <span className="rounded-lg bg-[#0c2461] px-3 py-1.5 text-xs font-bold text-white">
                 Q {globalQuestionNumber} / {totalQuestions}
               </span>
-              <span className="hidden sm:inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
-                {currentQuestion?.type === "single" ? "Single Correct" : "Multiple Correct"}
+                <span className="hidden sm:inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600">
+                {currentQuestion?.type === "single"
+                  ? "Single Correct"
+                  : currentQuestion?.type === "multiple"
+                    ? "Multiple Correct"
+                    : "Coding"}
               </span>
               {/* <span className="hidden sm:inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
                 {currentQuestion?.points} Mark{currentQuestion?.points !== 1 ? "s" : ""}
@@ -377,6 +412,7 @@ function ExamView({
             </div>
 
             {/* Options */}
+            {currentQuestion?.type !== "coding" && (
             <div className="space-y-2.5">
               {currentQuestion?.options.map((opt, optIdx) => {
                 const isSelected = currentSelected.includes(optIdx);
@@ -417,6 +453,95 @@ function ExamView({
                 );
               })}
             </div>
+            )}
+
+            {currentQuestion?.type === "coding" && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="text-xs font-semibold text-slate-600">Language</label>
+                  <select
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                    value={currentLanguage}
+                    onChange={(e) => {
+                      const nextLang = e.target.value;
+                      const starter =
+                        currentQuestion?.starterCodeByLanguage?.[nextLang] ||
+                        currentQuestion?.starterCode ||
+                        "";
+                      setCodingAnswers((s) => ({
+                        ...s,
+                        [currentKey]: {
+                          language: nextLang,
+                          code: starter,
+                        }
+                      }));
+                    }}
+                  >
+                    {(currentQuestion?.supportedLanguages || ["javascript"]).map((lang) => (
+                      <option key={lang} value={lang}>{lang}</option>
+                    ))}
+                  </select>
+                </div>
+                <textarea
+                  className="min-h-72 w-full rounded-xl border border-slate-300 bg-slate-950 p-4 font-mono text-xs text-emerald-200 focus:border-[#0c2461] focus:outline-none focus:ring-2 focus:ring-[#0c2461]/30"
+                  value={currentCode}
+                  onChange={(e) =>
+                    setCodingAnswers((s) => ({
+                      ...s,
+                      [currentKey]: {
+                        language: currentLanguage,
+                        code: e.target.value,
+                      }
+                    }))
+                  }
+                  placeholder={"function solve() {\n  // Write JavaScript code here\n}\n\nsolve();"}
+                />
+                <textarea
+                  className="min-h-20 w-full rounded-xl border border-slate-300 bg-white p-3 font-mono text-xs text-slate-800 focus:border-[#0c2461] focus:outline-none focus:ring-2 focus:ring-[#0c2461]/20"
+                  value={currentRunInput}
+                  onChange={(e) => setRunInputs((s) => ({ ...s, [currentKey]: e.target.value }))}
+                  placeholder="Custom input (stdin) for Run Code"
+                />
+                {Array.isArray(currentQuestion?.publicTestCases) && currentQuestion.publicTestCases.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="mb-2 text-xs font-semibold text-slate-700">Sample Test Cases</p>
+                    <div className="space-y-2">
+                      {currentQuestion.publicTestCases.map((tc, idx) => (
+                        <div key={idx} className="rounded-lg border border-slate-200 bg-white p-2">
+                          <p className="text-[11px] font-semibold text-slate-600">Case {idx + 1}</p>
+                          <p className="mt-1 text-[11px] text-slate-500">Input:</p>
+                          <pre className="whitespace-pre-wrap text-[11px] text-slate-700">{tc.input || "(empty)"}</pre>
+                          <p className="mt-1 text-[11px] text-slate-500">Expected Output:</p>
+                          <pre className="whitespace-pre-wrap text-[11px] text-slate-700">{tc.expectedOutput || "(empty)"}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onRunCode(activeSectionIdx, activeQuestionIdx, currentLanguage, currentCode, currentRunInput)}
+                    disabled={runCodeState.running}
+                    className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-bold text-white transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {runCodeState.running && runCodeState.key === currentKey ? "Running..." : "Run Code"}
+                  </button>
+                </div>
+                {(runCodeState.key === currentKey && (runCodeState.output || runCodeState.error)) && (
+                  <div className={`rounded-xl border p-3 text-xs ${
+                    runCodeState.error
+                      ? "border-red-200 bg-red-50 text-red-700"
+                      : "border-slate-200 bg-slate-50 text-slate-800"
+                  }`}>
+                    <p className="mb-1 font-semibold">{runCodeState.error ? "Error" : "Output"}</p>
+                    <pre className="whitespace-pre-wrap break-words font-mono">
+                      {runCodeState.error || runCodeState.output}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
             </div>
           </div>
 
@@ -441,7 +566,11 @@ function ExamView({
               {/* Clear */}
               <button
                 onClick={clearResponse}
-                disabled={currentSelected.length === 0}
+                disabled={
+                  currentQuestion?.type === "coding"
+                    ? !(currentCode || "").trim()
+                    : currentSelected.length === 0
+                }
                 className="flex items-center gap-1.5 rounded-lg border-2 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-red-300 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Icon d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" className="h-4 w-4" />
@@ -687,6 +816,14 @@ export default function CandidateInvitePage() {
   const [verified, setVerified]         = useState(false);
   const [examData, setExamData]         = useState(null);
   const [answers, setAnswers]           = useState({});
+  const [codingAnswers, setCodingAnswers] = useState({});
+  const [runInputs, setRunInputs] = useState({});
+  const [codeRunState, setCodeRunState] = useState({
+    running: false,
+    key: "",
+    output: "",
+    error: ""
+  });
   const [submission, setSubmission]     = useState(null);
   const [feedbackDone, setFeedbackDone] = useState(false);
   const [submitting, setSubmitting]     = useState(false);
@@ -875,12 +1012,43 @@ export default function CandidateInvitePage() {
     try {
       const { data } = await api.post(`/candidate/invite/${token}/start`);
       setExamData(data);
+      setAnswers({});
+      setCodingAnswers({});
+      setRunInputs({});
+      setCodeRunState({ running: false, key: "", output: "", error: "" });
       const end = new Date(data.endsAt).getTime();
       setCountdown(Math.max(0, Math.floor((end - Date.now()) / 1000)));
       await requestExamFullscreen();
     } catch (err) {
       setError(err.response?.data?.message || "Unable to start exam");
       await loadInvite();
+    }
+  };
+
+  const runCode = async (sectionIndex, questionIndex, language, code, input) => {
+    const key = `${sectionIndex}-${questionIndex}`;
+    setCodeRunState({ running: true, key, output: "", error: "" });
+    try {
+      const { data } = await api.post(`/candidate/invite/${token}/run-code`, {
+        sectionIndex,
+        questionIndex,
+        language,
+        code,
+        input,
+      });
+      setCodeRunState({
+        running: false,
+        key,
+        output: data?.output || "(no output)",
+        error: ""
+      });
+    } catch (err) {
+      setCodeRunState({
+        running: false,
+        key,
+        output: "",
+        error: err.response?.data?.message || "Code execution failed"
+      });
     }
   };
 
@@ -891,7 +1059,10 @@ export default function CandidateInvitePage() {
       section.questions.map((_q, qIdx) => answers[`${sIdx}-${qIdx}`] || [])
     );
     try {
-      const { data } = await api.post(`/candidate/invite/${token}/submit`, { answers: payload });
+      const { data } = await api.post(`/candidate/invite/${token}/submit`, {
+        answers: payload,
+        codingAnswers
+      });
       setSubmission(data.result);
       setExamData(null);
       if (document.exitFullscreen && getFullscreenElement()) {
@@ -930,6 +1101,12 @@ export default function CandidateInvitePage() {
         countdown={countdown}
         answers={answers}
         setAnswers={setAnswers}
+        codingAnswers={codingAnswers}
+        setCodingAnswers={setCodingAnswers}
+        onRunCode={runCode}
+        runCodeState={codeRunState}
+        runInputs={runInputs}
+        setRunInputs={setRunInputs}
         onSubmit={submitExam}
         submitting={submitting}
         error={error}

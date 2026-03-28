@@ -3,6 +3,7 @@ const express = require("express");
 const Assignment = require("../models/Assignment");
 const Candidate = require("../models/Candidate");
 const Submission = require("../models/Submission");
+const { runCode, evaluateCodeAgainstTestCases } = require("../utils/codeRunner");
 
 const router = express.Router();
 
@@ -28,20 +29,90 @@ function sanitizeExam(exam) {
         type: q.type,
         question: q.question,
         codeSnippet: q.codeSnippet || "",
-        options: q.options
+        starterCode: q.starterCode || "",
+        language: q.language || "javascript",
+        supportedLanguages: Array.isArray(q.supportedLanguages) && q.supportedLanguages.length
+          ? q.supportedLanguages
+          : [q.language || "javascript"],
+        starterCodeByLanguage:
+          q.starterCodeByLanguage && typeof q.starterCodeByLanguage.entries === "function"
+            ? Object.fromEntries(q.starterCodeByLanguage.entries())
+            : q.starterCodeByLanguage || {},
+        publicTestCases: (q.testCases || [])
+          .filter((tc) => !tc.isHidden)
+          .map((tc) => ({
+            input: tc.input || "",
+            expectedOutput: tc.expectedOutput || ""
+          })),
+        options: q.options || []
       }))
     }))
   };
 }
 
-function scoreExam(exam, submittedAnswers) {
+function parseCodingSubmission(rawValue, question) {
+  const fallbackLanguage = (Array.isArray(question.supportedLanguages) && question.supportedLanguages[0]) ||
+    question.language ||
+    "javascript";
+
+  if (typeof rawValue === "string") {
+    return { language: fallbackLanguage, code: rawValue };
+  }
+
+  if (rawValue && typeof rawValue === "object") {
+    const selectedLanguage = String(rawValue.language || fallbackLanguage);
+    const supported = Array.isArray(question.supportedLanguages) && question.supportedLanguages.length
+      ? question.supportedLanguages
+      : [fallbackLanguage];
+    const language = supported.includes(selectedLanguage) ? selectedLanguage : fallbackLanguage;
+    return {
+      language,
+      code: String(rawValue.code || "")
+    };
+  }
+
+  return { language: fallbackLanguage, code: "" };
+}
+
+function scoreExam(exam, submittedAnswers, codingAnswers = {}) {
   const flatAnswers = [];
   let rawScore = 0;
   let totalQuestions = 0;
   let correctCount = 0;
+  let wrongCount = 0;
 
   exam.sections.forEach((section, sectionIndex) => {
     section.questions.forEach((question, questionIndex) => {
+      if (question.type === "coding") {
+        totalQuestions += 1;
+        const key = `${sectionIndex}-${questionIndex}`;
+        const parsed = parseCodingSubmission(codingAnswers[key], question);
+        const testCases = Array.isArray(question.testCases) ? question.testCases : [];
+        const evaluated = evaluateCodeAgainstTestCases(parsed.language, parsed.code, testCases);
+        const isCorrect = evaluated.allPassed;
+
+        if (isCorrect) {
+          correctCount += 1;
+          rawScore += question.points;
+        } else {
+          wrongCount += 1;
+        }
+
+        flatAnswers.push({
+          sectionIndex,
+          questionIndex,
+          questionType: "coding",
+          selectedOptionIndexes: [],
+          submittedCode: parsed.code,
+          selectedLanguage: parsed.language,
+          testCasesPassed: evaluated.passedCount,
+          testCasesTotal: evaluated.totalCount,
+          isCorrect,
+          pointsEarned: isCorrect ? question.points : 0
+        });
+        return;
+      }
+
       totalQuestions += 1;
 
       const userAnswer =
@@ -58,19 +129,25 @@ function scoreExam(exam, submittedAnswers) {
       if (isCorrect) {
         correctCount += 1;
         rawScore += question.points;
+      } else {
+        wrongCount += 1;
       }
 
       flatAnswers.push({
         sectionIndex,
         questionIndex,
+        questionType: question.type === "multiple" ? "multiple" : "single",
         selectedOptionIndexes: normalizedUser,
+        submittedCode: "",
+        selectedLanguage: "javascript",
+        testCasesPassed: 0,
+        testCasesTotal: 0,
         isCorrect,
         pointsEarned: isCorrect ? question.points : 0
       });
     });
   });
 
-  const wrongCount = totalQuestions - correctCount;
   const negativeConfig = exam?.negativeMarking || {};
   const wrongAnswersCount = Number(negativeConfig.wrongAnswersCount) || 3;
   const penaltyPoints = Number(negativeConfig.penaltyPoints);
@@ -262,9 +339,54 @@ router.post("/invite/:token/start", async (req, res) => {
   }
 });
 
+router.post("/invite/:token/run-code", async (req, res) => {
+  try {
+    const { sectionIndex, questionIndex, code, language, input = "" } = req.body;
+    const assignment = await getAssignmentWithExam(req.params.token);
+    if (!assignment) return res.status(404).json({ message: "Invalid invite link" });
+
+    const now = Date.now();
+    const { startMs, endMs } = getWindow(assignment, assignment.exam);
+    if (!assignment.isActivated || now < startMs || now > endMs) {
+      return res.status(400).json({ message: "Exam is not currently active" });
+    }
+
+    const sIdx = Number(sectionIndex);
+    const qIdx = Number(questionIndex);
+    if (!Number.isInteger(sIdx) || !Number.isInteger(qIdx)) {
+      return res.status(400).json({ message: "Invalid question reference" });
+    }
+
+    const question = assignment.exam?.sections?.[sIdx]?.questions?.[qIdx];
+    if (!question || question.type !== "coding") {
+      return res.status(404).json({ message: "Coding question not found" });
+    }
+
+    const supportedLanguages = Array.isArray(question.supportedLanguages) && question.supportedLanguages.length
+      ? question.supportedLanguages
+      : [question.language || "javascript"];
+    const selectedLanguage = String(language || supportedLanguages[0]);
+    if (!supportedLanguages.includes(selectedLanguage)) {
+      return res.status(400).json({ message: "Unsupported language for this question" });
+    }
+
+    const result = runCode(selectedLanguage, code, String(input || ""));
+    if (!result.ok) {
+      return res.status(400).json({
+        message: result.stderr || "Code execution failed",
+        output: result.stdout || ""
+      });
+    }
+
+    return res.json({ output: result.stdout || "(no output)" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 router.post("/invite/:token/submit", async (req, res) => {
   try {
-    const { answers } = req.body;
+    const { answers, codingAnswers } = req.body;
     const assignment = await getAssignmentWithExam(req.params.token);
     if (!assignment) return res.status(404).json({ message: "Invalid invite link" });
 
@@ -279,7 +401,7 @@ router.post("/invite/:token/submit", async (req, res) => {
       return res.status(400).json({ message: "Exam window expired" });
     }
 
-    const result = scoreExam(assignment.exam, answers || []);
+    const result = scoreExam(assignment.exam, answers || [], codingAnswers || {});
 
     const submission = await Submission.create({
       assignment: assignment._id,

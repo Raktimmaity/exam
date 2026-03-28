@@ -4,7 +4,12 @@ const answerSchema = new mongoose.Schema(
   {
     sectionIndex: { type: Number, required: true },
     questionIndex: { type: Number, required: true },
+    questionType: { type: String, enum: ["single", "multiple", "coding"], default: "single" },
     selectedOptionIndexes: { type: [Number], default: [] },
+    submittedCode: { type: String, default: "" },
+    selectedLanguage: { type: String, enum: ["javascript", "python", "c", "cpp"], default: "javascript" },
+    testCasesPassed: { type: Number, default: 0 },
+    testCasesTotal: { type: Number, default: 0 },
     isCorrect: { type: Boolean, required: true },
     pointsEarned: { type: Number, default: 0 }
   },

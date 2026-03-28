@@ -1281,7 +1281,7 @@ export default function CandidateInvitePage() {
         </div>
       </div>
 
-      {showRulesModal && verified && networkCheck.status === "done" && !rulesAcknowledged && (
+      {showRulesModal && verified && networkCheck.status === "done" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
             <div className="bg-[#0c2461] px-6 py-4 text-white">

@@ -452,7 +452,12 @@ export default function AdminDashboardPage() {
   /* ── Assignment ── */
   const submitAssignment = async (e) => {
     e.preventDefault();
-    const { data } = await api.post("/admin/assignments", { ...assignForm, validityHours: Number(assignForm.validityHours) });
+    const scheduledAtIso = assignForm.scheduledAt ? new Date(assignForm.scheduledAt).toISOString() : "";
+    const { data } = await api.post("/admin/assignments", {
+      ...assignForm,
+      scheduledAt: scheduledAtIso,
+      validityHours: Number(assignForm.validityHours),
+    });
     setAssignments((s) => [data.assignment, ...s]);
     notify(`Exam assigned. Invite URL: ${data.inviteUrl}`);
     await loadAll();

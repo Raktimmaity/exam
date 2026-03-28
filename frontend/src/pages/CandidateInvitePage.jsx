@@ -10,6 +10,19 @@ function formatSeconds(seconds) {
   return [h, m, sec].map((v) => String(v).padStart(2, "0")).join(":");
 }
 
+function formatInIndiaTime(value) {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(new Date(value));
+}
+
 const Icon = ({ d, className = "h-5 w-5" }) => (
   <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
     <path strokeLinecap="round" strokeLinejoin="round" d={d} />
@@ -1071,7 +1084,7 @@ export default function CandidateInvitePage() {
         {invite && (
           <div className="ml-auto hidden sm:block text-right">
             <p className="text-xs font-semibold text-white truncate max-w-xs">{invite.exam.title}</p>
-            <p className="text-[10px] text-blue-300">{new Date(invite.scheduledAt).toLocaleString()}</p>
+            <p className="text-[10px] text-blue-300">{formatInIndiaTime(invite.scheduledAt)} IST</p>
           </div>
         )}
       </div>
@@ -1095,7 +1108,7 @@ export default function CandidateInvitePage() {
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Scheduled</p>
-                      <p className="text-sm font-semibold text-slate-800">{new Date(invite.scheduledAt).toLocaleString()}</p>
+                      <p className="text-sm font-semibold text-slate-800">{formatInIndiaTime(invite.scheduledAt)} IST</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">

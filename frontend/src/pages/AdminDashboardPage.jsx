@@ -97,6 +97,19 @@ const defaultExamForm = {
   negativePenaltyPoints: 0.03,
 };
 
+function formatInIndiaTime(value) {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(new Date(value));
+}
+
 /* ══════════════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════════════ */
@@ -690,7 +703,7 @@ export default function AdminDashboardPage() {
                         <tr key={a._id} className="hover:bg-slate-50/60 transition-colors">
                           <td className="px-6 py-3 font-medium text-slate-800">{a.candidate?.name || "-"}</td>
                           <td className="px-6 py-3 text-slate-600">{a.exam?.title || "-"}</td>
-                          <td className="px-6 py-3 text-slate-500">{new Date(a.scheduledAt).toLocaleString()}</td>
+                          <td className="px-6 py-3 text-slate-500">{formatInIndiaTime(a.scheduledAt)}</td>
                           <td className="px-6 py-3"><StatusBadge status={a.status} /></td>
                           <td className="px-6 py-3 text-slate-600">
                             {a.result
@@ -1245,7 +1258,7 @@ export default function AdminDashboardPage() {
                           ) : null}
                           <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
                             <Icon d={ICONS.clock} className="h-3.5 w-3.5" />
-                            {new Date(a.scheduledAt).toLocaleString()}
+                            {formatInIndiaTime(a.scheduledAt)}
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
@@ -1312,7 +1325,7 @@ export default function AdminDashboardPage() {
                         <tr key={a._id} className={`hover:bg-slate-50/60 transition-colors ${selectedSubmission?.assignmentId === a._id ? "bg-brand-50" : ""}`}>
                           <td className="px-6 py-3 font-medium text-slate-800">{a.candidate?.name || "—"}</td>
                           <td className="px-6 py-3 text-slate-600">{a.exam?.title || "—"}</td>
-                          <td className="px-6 py-3 text-slate-500">{new Date(a.scheduledAt).toLocaleString()}</td>
+                          <td className="px-6 py-3 text-slate-500">{formatInIndiaTime(a.scheduledAt)}</td>
                           <td className="px-6 py-3"><StatusBadge status={a.status} /></td>
                           <td className="px-6 py-3 font-semibold text-slate-700">
                             {a.result

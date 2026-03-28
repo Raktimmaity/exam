@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.input {
+  @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none;
+}
+
+.btn {
+  @apply rounded-lg px-4 py-2 text-sm font-semibold;
+}
+
+.btn-primary {
+  @apply btn bg-brand-500 text-white hover:bg-brand-700;
+}
+
+.btn-secondary {
+  @apply btn bg-slate-700 text-white hover:bg-slate-900;
+}
+
+.card {
+  @apply rounded-xl bg-white p-5 shadow-sm;
+}

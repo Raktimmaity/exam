@@ -110,6 +110,13 @@ function formatInIndiaTime(value) {
   }).format(new Date(value));
 }
 
+function toIstOffsetDateTime(datetimeLocal) {
+  if (!datetimeLocal) return "";
+  if (/Z$|[+-]\d{2}:\d{2}$/.test(datetimeLocal)) return datetimeLocal;
+  const withSeconds = datetimeLocal.length === 16 ? `${datetimeLocal}:00` : datetimeLocal;
+  return `${withSeconds}+05:30`;
+}
+
 /* ══════════════════════════════════════════════════════════════
    MAIN PAGE
 ══════════════════════════════════════════════════════════════ */
@@ -465,7 +472,7 @@ export default function AdminDashboardPage() {
   /* ── Assignment ── */
   const submitAssignment = async (e) => {
     e.preventDefault();
-    const scheduledAtIso = assignForm.scheduledAt ? new Date(assignForm.scheduledAt).toISOString() : "";
+    const scheduledAtIso = toIstOffsetDateTime(assignForm.scheduledAt);
     const { data } = await api.post("/admin/assignments", {
       ...assignForm,
       scheduledAt: scheduledAtIso,

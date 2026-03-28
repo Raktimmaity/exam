@@ -12,6 +12,13 @@ const router = express.Router();
 
 router.use(adminAuth);
 
+function parseScheduledAt(scheduledAt) {
+  if (typeof scheduledAt !== "string") return new Date(scheduledAt);
+  if (/Z$|[+-]\d{2}:\d{2}$/.test(scheduledAt)) return new Date(scheduledAt);
+  const withSeconds = scheduledAt.length === 16 ? `${scheduledAt}:00` : scheduledAt;
+  return new Date(`${withSeconds}+05:30`);
+}
+
 router.post("/candidates", async (req, res) => {
   try {
     const { name, email, phone, company = "", details = "" } = req.body;
@@ -185,10 +192,15 @@ router.post("/assignments", async (req, res) => {
     if (!candidate) return res.status(404).json({ message: "Candidate not found" });
     if (!exam) return res.status(404).json({ message: "Exam not found" });
 
+    const parsedScheduledAt = parseScheduledAt(scheduledAt);
+    if (Number.isNaN(parsedScheduledAt.getTime())) {
+      return res.status(400).json({ message: "Invalid scheduledAt value" });
+    }
+
     const assignment = await Assignment.create({
       candidate: candidate._id,
       exam: exam._id,
-      scheduledAt: new Date(scheduledAt),
+      scheduledAt: parsedScheduledAt,
       validityHours,
       isActivated: false,
       inviteToken: makeToken(20)
